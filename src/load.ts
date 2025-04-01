@@ -1,7 +1,6 @@
 import { Smipper } from "./Smipper";
 import { rewriteLocalControl } from "./rewriteLocalControl";
 import fs from "fs";
-import got from "got";
 import path from "path";
 import process from "process";
 import assert from "assert";
@@ -56,9 +55,14 @@ export async function load(smipper: Smipper, filePath: string): Promise<string> 
 
     // let retryIndex = 0;
     async function get(): Promise<string> {
-        const response = await got.get(filePath, { timeout: 10000 });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            controller.abort();
+        }, 10000);
+
+        const response = await fetch(filePath, { signal: controller.signal });
         smipper.verbose(response.headers);
-        return response.body || "";
+        return response.text() || "";
     }
 
     const response = await get();
