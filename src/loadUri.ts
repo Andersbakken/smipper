@@ -1,6 +1,7 @@
+import { LoadResult } from "./LoadResult";
 import { Rejecter, SourceMapResolve } from "./types";
-import { load } from "./load";
 import { Smipper } from "./Smipper";
+import { load } from "./load";
 import assert from "assert";
 import sourceMap from "source-map";
 
@@ -16,11 +17,13 @@ export function loadUri(smipper: Smipper, path: string): Promise<sourceMap.Sourc
                 rejecters: [reject]
             });
             load(smipper, path)
-                .then((jsData: string) => {
+                .then((jsResult: LoadResult) => {
+                    const jsData = jsResult.contents;
+                    const baseUrl = jsResult.resolvedUrl;
                     const idx = jsData.lastIndexOf("//# sourceMappingURL=");
                     smipper.verbose("Got the file", jsData.length, idx);
                     if (idx == -1) {
-                        return path + ".map";
+                        return baseUrl + ".map";
                     }
 
                     const end = jsData.indexOf("\n", idx + 21);
@@ -33,15 +36,13 @@ export function loadUri(smipper: Smipper, path: string): Promise<sourceMap.Sourc
                     if (mapUrl.indexOf("://") != -1) {
                         return mapUrl;
                     }
-                    // console.log(mapUrl);
-                    return new URL(mapUrl, path).href;
+                    return new URL(mapUrl, baseUrl).href;
                 })
                 .then((mapUrl) => {
-                    // console.log(mapUrl.substring(0, 20));
                     if (mapUrl.startsWith("base64,")) {
                         return Buffer.from(mapUrl.substring(7), "base64").toString();
                     }
-                    return load(smipper, mapUrl);
+                    return load(smipper, mapUrl).then((r) => r.contents);
                 })
                 .then(async (sourceMapData: string) => {
                     const parsed = JSON.parse(sourceMapData);
@@ -76,3 +77,4 @@ export function loadUri(smipper: Smipper, path: string): Promise<sourceMap.Sourc
         }
     });
 }
+

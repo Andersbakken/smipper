@@ -1,3 +1,4 @@
+import { LoadResult } from "./LoadResult";
 import { Smipper } from "./Smipper";
 import { rewriteLocalControl } from "./rewriteLocalControl";
 import fs from "fs";
@@ -5,7 +6,7 @@ import path from "path";
 import process from "process";
 import assert from "assert";
 
-export async function load(smipper: Smipper, filePath: string): Promise<string> {
+export async function load(smipper: Smipper, filePath: string): Promise<LoadResult> {
     smipper.verbose("load", filePath);
     if (filePath.startsWith("http://localcontrol.netflix.com/")) {
         filePath = rewriteLocalControl(smipper, filePath);
@@ -17,7 +18,7 @@ export async function load(smipper: Smipper, filePath: string): Promise<string> 
         try {
             const ret = fs.readFileSync(mapped, "utf8");
             smipper.verbose("Loaded mapped url", filePath, mapped, "=>", ret.length);
-            return ret;
+            return { contents: ret, resolvedUrl: mapped };
         } catch (err: unknown) {
             assert(err instanceof Error);
             smipper.verbose("Failed to load mapped url", filePath, mapped, err.message);
@@ -33,10 +34,15 @@ export async function load(smipper: Smipper, filePath: string): Promise<string> 
         } else {
             filePath = rewriteLocalControl(smipper, filePath);
         }
+    } else if (filePath.startsWith("file:///") && !fs.existsSync(filePath.substring(7))) {
+        filePath = rewriteLocalControl(smipper, filePath.substring(7));
     }
 
     if (filePath.startsWith("file:///")) {
-        return fs.readFileSync(filePath.substring(7), "utf8");
+        return {
+            contents: fs.readFileSync(filePath.substring(7), "utf8"),
+            resolvedUrl: filePath
+        };
     }
 
     if (!filePath.startsWith("http://") && !filePath.startsWith("https://")) {
@@ -46,14 +52,13 @@ export async function load(smipper: Smipper, filePath: string): Promise<string> 
     if (smipper.cache && smipper.cacheKey) {
         const response = smipper.cache.get(smipper.cacheKey, filePath);
         if (response) {
-            return response;
+            return { contents: response, resolvedUrl: filePath };
         }
         if (!smipper.cacheEntry) {
             smipper.cacheEntry = smipper.cache.create(smipper.cacheKey);
         }
     }
 
-    // let retryIndex = 0;
     async function get(): Promise<string> {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
@@ -69,5 +74,6 @@ export async function load(smipper: Smipper, filePath: string): Promise<string> 
     if (smipper.cacheEntry) {
         smipper.cacheEntry.add(filePath, response);
     }
-    return response;
+    return { contents: response, resolvedUrl: filePath };
 }
+

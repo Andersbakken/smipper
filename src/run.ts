@@ -18,7 +18,14 @@ export async function run(smipper: Smipper): Promise<string> {
                 x = x.trim();
                 let match = / *at *([^ ]*).* \(?([^ ]+):([0-9]+):([0-9]+)/.exec(x);
                 if (!match) {
-                    match = /([^ ]+@)?(.*):([0-9]+):([0-9]+)/.exec(x);
+                    // Anchor the URL/path on a scheme (e.g. http://, file://) or a leading "/"
+                    // so we don't accidentally swallow log prefixes like
+                    //   "00:00:00.133 [milo:0x16bb23000] SMIPPER(trace):"
+                    // into the captured "url".
+                    match =
+                        /(?:([^\s@]+)@)?((?:[a-zA-Z][a-zA-Z0-9+.-]*:\/\/|\/)[^\s:]+):([0-9]+):([0-9]+)/.exec(
+                            x
+                        );
                 }
                 smipper.verbose(x, " => ", match);
                 if (!match) {
